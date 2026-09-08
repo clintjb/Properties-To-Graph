@@ -44,6 +44,6 @@ npm run build
 
 ## Notes
 
-This is an experimental plugin and relies on Obsidian's internal Graph View renderer APIs, which are not part of the public `obsidian` package types and can change between Obsidian releases.
+This plugin relies on Obsidian's internal Graph View renderer APIs, which are not part of the public `obsidian` package types and can change between Obsidian releases.
 
 This project was originally inspired by the graph-injection approach used by [Folders to Graph](https://github.com/ratibus11/folders2graph) although the codebase has since been rewritten independently around frontmatter properties rather than folders.
