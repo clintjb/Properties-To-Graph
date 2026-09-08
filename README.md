@@ -2,7 +2,7 @@
  
 ![Demo](demo.gif)
  
-This plugin allows you to chose frontmatter properties and add them as virtual nodes in Obsidian's graph view, so notes group visually by property instead of only by tags or links.
+This plugin allows you to chose frontmatter properties and add them as virtual nodes in Obsidian's graph view - basically  notes can be grouped visually by properties instead of only by tags or links.
  
 ## Features
  
