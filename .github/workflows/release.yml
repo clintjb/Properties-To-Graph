@@ -1,0 +1,27 @@
+name: Release plugin
+on:
+  push:
+    tags: ['*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Verify version
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          test "$VERSION" = "$GITHUB_REF_NAME"
+      - name: Create / Update Release
+        run: |
+            gh release create "$GITHUB_REF_NAME" main.js manifest.json --title "$GITHUB_REF_NAME" --generate-notes || \
+            gh release upload "$GITHUB_REF_NAME" main.js manifest.json --clobber
+        env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
