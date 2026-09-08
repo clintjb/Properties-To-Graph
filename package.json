@@ -1,0 +1,26 @@
+{
+	"name": "properties-to-graph",
+	"version": "0.3.3",
+	"description": "Enhance Obsidian Graph View by grouping notes using frontmatter property values, with folding and subtree weighting.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"graph-view"
+	],
+	"author": "Clint Bird",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.16",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.19.11",
+		"obsidian": "^1.4.11",
+		"tslib": "2.6.2",
+		"typescript": "^5.3.3"
+	}
+}

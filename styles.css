@@ -1,0 +1,28 @@
+/* Rows injected into the native graph "Filters" panel, one per configured
+   property, so they can be toggled the same way as Tags/Attachments.
+   Obsidian's `Setting` component is designed for full settings pages (extra
+   padding, a bottom border, a wider min-height); trim it down here so it
+   sits flush with the compact Tags/Attachments/Existing-files-only rows
+   already in this panel. */
+.p2g-control-row .setting-item {
+	padding: 4px 0;
+	border: none;
+}
+
+.p2g-control-row .setting-item-info {
+	margin-right: 8px;
+}
+
+.p2g-control-row .setting-item-name {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-normal);
+}
+
+.p2g-control-row .setting-item-control {
+	justify-content: flex-end;
+}
+
+/* Settings tab tweaks */
+.p2g-property-row .p2g-property-label-input {
+	max-width: 10rem;
+}
