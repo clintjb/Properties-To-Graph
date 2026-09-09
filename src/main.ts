@@ -1,5 +1,5 @@
 import { Notice, Plugin } from 'obsidian';
-import { DEFAULT_SETTINGS, migrateSettings, PropertiesToGraphSettings } from './settings';
+import { DEFAULT_SETTINGS, LegacyPropertiesToGraphSettings, migrateSettings, PropertiesToGraphSettings } from './settings';
 import { Hierarchy } from './hierarchy';
 import { PropertiesToGraphSettingTab } from './settingsTab';
 import { GraphData, GraphRenderer, GraphView } from './graphTypes';
@@ -16,7 +16,7 @@ export default class PropertiesToGraphPlugin extends Plugin {
 	allNodeIds = new Set<string>();
 	hierarchy = new Hierarchy();
 
-	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+	private refreshTimer: number | null = null;
 	private originalOpenLinkText: typeof this.app.workspace.openLinkText | null = null;
 	private shiftHeld = false;
 
@@ -80,7 +80,7 @@ export default class PropertiesToGraphPlugin extends Plugin {
 		window.removeEventListener('keydown', this.onKeyDown, true);
 		window.removeEventListener('keyup', this.onKeyUp, true);
 		window.removeEventListener('blur', this.onBlur, true);
-		if (this.refreshTimer) clearTimeout(this.refreshTimer);
+		if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
 
 		for (const leaf of this.app.workspace.getLeavesOfType('graph')) {
 			const view = leaf.view as unknown as GraphView;
@@ -95,7 +95,8 @@ export default class PropertiesToGraphPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const stored = await this.loadData();
+		const raw: unknown = await this.loadData();
+		const stored = raw as (Partial<PropertiesToGraphSettings> & LegacyPropertiesToGraphSettings) | null | undefined;
 		const { settings, migrated } = migrateSettings(stored);
 		this.settings = settings;
 		if (migrated) await this.saveSettings();
@@ -106,8 +107,8 @@ export default class PropertiesToGraphPlugin extends Plugin {
 	}
 
 	scheduleRefresh(): void {
-		if (this.refreshTimer) clearTimeout(this.refreshTimer);
-		this.refreshTimer = setTimeout(() => {
+		if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+		this.refreshTimer = window.setTimeout(() => {
 			this.refreshTimer = null;
 			this.refreshGraphLeaves();
 		}, 350);
@@ -190,7 +191,7 @@ export default class PropertiesToGraphPlugin extends Plugin {
 						const entry = this.settings.properties.find(p => p.property === property);
 						if (!entry) return;
 						entry.visible = visible;
-						this.saveSettings().then(() => this.refreshGraphLeaves());
+						void this.saveSettings().then(() => this.refreshGraphLeaves());
 					}
 				});
 			} catch (e) {
@@ -200,29 +201,33 @@ export default class PropertiesToGraphPlugin extends Plugin {
 	}
 
 	private installInjector(renderer: GraphRenderer): void {
-		if (!renderer.__p2gOriginalSetData) renderer.__p2gOriginalSetData = renderer.setData;
-		const plugin = this;
+		if (!renderer.__p2gOriginalSetData) renderer.__p2gOriginalSetData = renderer.setData.bind(renderer);
+		const injectAndPatch = this.handleSetData.bind(this);
 		renderer.setData = function (this: GraphRenderer, data: GraphData) {
-			if (!this.__p2gOriginalSetData) return;
-			try {
-				const injected = injectPropertyNodes(plugin.app, plugin.settings, plugin.hierarchy, data);
-				plugin.propertyNodeIds = injected.propertyNodeIds;
-				plugin.allNodeIds = injected.allNodeIds;
-				// Mutate the existing Maps in place so the patched prototype's
-				// captured `deps.nodeLabels`/`deps.nodeProperty` references
-				// (bound once, on first patch) stay live instead of pointing
-				// at a stale snapshot from the first render.
-				plugin.nodeLabels.clear();
-				injected.nodeLabels.forEach((label, id) => plugin.nodeLabels.set(id, label));
-				plugin.nodeProperty.clear();
-				injected.nodeProperty.forEach((property, id) => plugin.nodeProperty.set(id, property));
-			} catch (e) {
-				console.error('Properties to Graph: injection failed', e);
-			}
-			const setDataResult = this.__p2gOriginalSetData.call(this, data);
-			plugin.patchNodePrototypeFor(this);
-			return setDataResult;
+			return injectAndPatch(this, data);
 		};
+	}
+
+	private handleSetData(renderer: GraphRenderer, data: GraphData): unknown {
+		if (!renderer.__p2gOriginalSetData) return undefined;
+		try {
+			const injected = injectPropertyNodes(this.app, this.settings, this.hierarchy, data);
+			this.propertyNodeIds = injected.propertyNodeIds;
+			this.allNodeIds = injected.allNodeIds;
+			// Mutate the existing Maps in place so the patched prototype's
+			// captured `deps.nodeLabels`/`deps.nodeProperty` references
+			// (bound once, on first patch) stay live instead of pointing
+			// at a stale snapshot from the first render.
+			this.nodeLabels.clear();
+			injected.nodeLabels.forEach((label, id) => this.nodeLabels.set(id, label));
+			this.nodeProperty.clear();
+			injected.nodeProperty.forEach((property, id) => this.nodeProperty.set(id, property));
+		} catch (e) {
+			console.error('Properties to Graph: injection failed', e);
+		}
+		const setDataResult = renderer.__p2gOriginalSetData(data);
+		this.patchNodePrototypeFor(renderer);
+		return setDataResult;
 	}
 
 	private patchNodePrototypeFor(renderer: GraphRenderer): void {
@@ -240,30 +245,24 @@ export default class PropertiesToGraphPlugin extends Plugin {
 
 		const workspace = this.app.workspace;
 		this.originalOpenLinkText = workspace.openLinkText.bind(workspace);
-		const plugin = this;
 
-		workspace.openLinkText = function (
-			linktext: string,
-			sourcePath: string,
-			newLeaf?: boolean,
-			openViewState?: unknown
-		) {
-			const activeIsGraph = plugin.app.workspace.getMostRecentLeaf()?.view?.getViewType?.() === 'graph';
+		workspace.openLinkText = (linktext: string, sourcePath: string, newLeaf?: boolean, openViewState?: unknown) => {
+			const activeIsGraph = this.app.workspace.getMostRecentLeaf()?.view?.getViewType?.() === 'graph';
 
 			// Shift+click on a graph node folds/unfolds its structural subtree.
-			if (plugin.shiftHeld && activeIsGraph && plugin.allNodeIds.has(linktext)) {
-				plugin.handleFoldToggle(linktext);
+			if (this.shiftHeld && activeIsGraph && this.allNodeIds.has(linktext)) {
+				this.handleFoldToggle(linktext);
 				return Promise.resolve();
 			}
 
 			// Property nodes are virtual graph nodes. Clicking them behaves
 			// like clicking a native tag: filter the current graph.
-			if (plugin.propertyNodeIds.has(linktext)) {
-				plugin.applyPropertyFilter(linktext);
+			if (this.propertyNodeIds.has(linktext)) {
+				this.applyPropertyFilter(linktext);
 				return Promise.resolve();
 			}
 
-			return plugin.originalOpenLinkText!(linktext, sourcePath, newLeaf, openViewState as never);
+			return this.originalOpenLinkText!(linktext, sourcePath, newLeaf, openViewState as never);
 		};
 	}
 
@@ -309,7 +308,7 @@ export default class PropertiesToGraphPlugin extends Plugin {
 		}
 
 		try {
-			view && view.showSearch && view.showSearch();
+			view?.showSearch?.();
 		} catch {
 			// Non-fatal: some Obsidian versions may not expose showSearch().
 		}
@@ -326,11 +325,11 @@ export default class PropertiesToGraphPlugin extends Plugin {
 		} else {
 			for (const id of descendants) this.settings.hiddenNodes[id] = true;
 		}
-		this.saveSettings().then(() => this.refreshGraphLeaves());
+		void this.saveSettings().then(() => this.refreshGraphLeaves());
 	}
 
 	unfoldAll(): void {
 		this.settings.hiddenNodes = {};
-		this.saveSettings().then(() => this.refreshGraphLeaves());
+		void this.saveSettings().then(() => this.refreshGraphLeaves());
 	}
 }

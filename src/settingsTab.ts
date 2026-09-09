@@ -13,7 +13,7 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		containerEl.createEl('h2', { text: 'Properties to Graph' });
+		new Setting(containerEl).setName('Properties to Graph').setHeading();
 		containerEl.createEl('p', {
 			text: 'Choose one or more frontmatter properties. Each unique value of each property becomes a virtual, colour-coded node in Obsidian\'s graph.'
 		});
@@ -21,7 +21,7 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 		const availableProperties = this.plugin.getAvailableProperties();
 		const usedProperties = new Set(this.plugin.settings.properties.map(p => p.property));
 
-		containerEl.createEl('h3', { text: 'Properties' });
+		new Setting(containerEl).setName('Properties').setHeading();
 
 		if (!this.plugin.settings.properties.length) {
 			containerEl.createEl('p', {
@@ -95,7 +95,7 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 				);
 
 			setting.settingEl.addClass('p2g-property-row');
-			const textInput = setting.controlEl.querySelector('input[type="text"]') as HTMLInputElement | null;
+			const textInput = setting.controlEl.querySelector('input[type="text"]');
 			if (textInput) textInput.addClass('p2g-property-label-input');
 		});
 
@@ -120,7 +120,7 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 				})
 		);
 
-		containerEl.createEl('h3', { text: 'General' });
+		new Setting(containerEl).setName('General').setHeading();
 
 		new Setting(containerEl)
 			.setName('Show property nodes')

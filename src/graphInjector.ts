@@ -30,23 +30,34 @@ export function propertyFromId(id: string): string {
 	}
 }
 
+/** Safely coerce a primitive-ish value to a trimmed string without risking a bare `[object Object]`. */
+function safeToString(value: string | number | boolean): string {
+	return String(value).trim();
+}
+
 function extractPropertyValues(value: unknown): string[] {
 	if (Array.isArray(value)) {
-		return value.flatMap(v => extractPropertyValues(v));
+		const items = value as unknown[];
+		return items.flatMap(v => extractPropertyValues(v));
 	}
 	if (value === null || value === undefined) return [];
 	if (typeof value === 'object') {
 		// Obsidian properties can contain objects for dates/links in some builds.
 		const maybePath = (value as { path?: unknown }).path;
-		if (maybePath) return [String(maybePath).trim()];
+		if (typeof maybePath === 'string' || typeof maybePath === 'number' || typeof maybePath === 'boolean') {
+			return [safeToString(maybePath)];
+		}
 		try {
 			return [JSON.stringify(value)];
 		} catch {
-			return [String(value).trim()];
+			return [];
 		}
 	}
-	const text = String(value).trim();
-	return text ? [text] : [];
+	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+		const text = safeToString(value);
+		return text ? [text] : [];
+	}
+	return [];
 }
 
 function resolveFileForNode(app: App, nodeId: string): TFile | null {
@@ -106,7 +117,9 @@ export function injectPropertyNodes(
 		const file = resolveFileForNode(app, nodeId);
 		if (!file) continue;
 		const cache = app.metadataCache.getFileCache(file);
-		const frontmatter = cache && cache.frontmatter;
+		const rawFrontmatter: unknown = cache?.frontmatter;
+		const frontmatter =
+			rawFrontmatter && typeof rawFrontmatter === 'object' ? (rawFrontmatter as Record<string, unknown>) : undefined;
 		if (!frontmatter) continue;
 
 		for (const { property } of configs) {
