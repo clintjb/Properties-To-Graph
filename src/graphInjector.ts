@@ -116,8 +116,10 @@ export function injectPropertyNodes(
 	const additions: Addition[] = [];
 
 	const nodeEntries: [string, GraphNodeData][] = [];
-	for (const [nodeId, value] of Object.entries(data.nodes)) {
-		if (isGraphNodeData(value)) nodeEntries.push([nodeId, value]);
+	for (const nodeId in data.nodes) {
+		if (!Object.prototype.hasOwnProperty.call(data.nodes, nodeId)) continue;
+		const nodeData: GraphNodeData = data.nodes[nodeId];
+		nodeEntries.push([nodeId, nodeData]);
 	}
 
 	for (const [nodeId, nodeData] of nodeEntries) {
@@ -165,18 +167,15 @@ export function injectPropertyNodes(
 	return result;
 }
 
-function isGraphNodeData(value: unknown): value is GraphNodeData {
-	return typeof value === 'object' && value !== null;
-}
-
 /** Remove nodes (and any links pointing at them) that the user has folded away. */
 export function filterHiddenNodes(settings: PropertiesToGraphSettings, data: GraphData): void {
 	for (const id of Object.keys(settings.hiddenNodes)) delete data.nodes[id];
-	for (const value of Object.values(data.nodes)) {
-		if (!isGraphNodeData(value)) continue;
-		const nodeData = value;
-		if (!nodeData.links || typeof nodeData.links !== 'object') continue;
-		for (const targetId of Object.keys(nodeData.links)) {
+	for (const nodeId in data.nodes) {
+		if (!Object.prototype.hasOwnProperty.call(data.nodes, nodeId)) continue;
+		const nodeData: GraphNodeData = data.nodes[nodeId];
+		if (!nodeData.links) continue;
+		for (const targetId in nodeData.links) {
+			if (!Object.prototype.hasOwnProperty.call(nodeData.links, targetId)) continue;
 			if (settings.hiddenNodes[targetId]) delete nodeData.links[targetId];
 		}
 	}
