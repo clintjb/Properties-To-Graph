@@ -176,7 +176,8 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 							// Deleting the page currently being viewed can leave Obsidian
 							// on a stale nested settings route. Explicitly reopen this plugin
 							// tab so the user returns to the root Properties settings page.
-							this.app.setting.openTabById(this.plugin.manifest.id);
+							(this.app as App & { setting: { openTabById: (id: string) => void } })
+    							.setting.openTabById(this.plugin.manifest.id);
 							this.update();
 						})
 					);
