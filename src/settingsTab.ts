@@ -1,4 +1,4 @@
-import { App, PluginSettingTab } from 'obsidian';
+import { App, PluginSettingTab, Setting, DropdownComponent, TextComponent, ColorComponent, ToggleComponent } from 'obsidian';
 import type PropertiesToGraphPlugin from './main';
 import { DEFAULT_COLOR, displayLabelFor, nextPaletteColor } from './settings';
 
@@ -31,14 +31,14 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 						this.update();
 					}
 				},
-				onDelete: async index => {
+				onDelete: async (index: number) => {
 					this.plugin.settings.properties.splice(index, 1);
 					await this.plugin.saveSettings();
 					this.plugin.refreshGraphLeaves();
 					this.plugin.refreshGraphControls();
 					this.update();
 				},
-				onReorder: async (oldIndex, newIndex) => {
+				onReorder: async (oldIndex: number, newIndex: number) => {
 					const [moved] = this.plugin.settings.properties.splice(oldIndex, 1);
 					if (moved) this.plugin.settings.properties.splice(newIndex, 0, moved);
 					await this.plugin.saveSettings();
@@ -84,10 +84,10 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 			{
 				name: 'Property',
 				desc: 'The frontmatter property whose values become graph nodes.',
-				render: setting => {
+				render: (setting: Setting) => {
 					const entry = this.plugin.settings.properties[index];
 					if (!entry) return;
-					setting.addDropdown(dropdown => {
+					setting.addDropdown((dropdown: DropdownComponent) => {
 						dropdown.addOption('', '— Select a property —');
 						for (const property of availableProperties) {
 							if (property === entry.property || !usedProperties.has(property)) {
@@ -95,7 +95,7 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 							}
 						}
 						dropdown.setValue(entry.property || '');
-						dropdown.onChange(async value => {
+						dropdown.onChange(async (value: string) => {
 							entry.property = value;
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves();
@@ -108,13 +108,13 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 			{
 				name: 'Display name',
 				desc: 'The name shown in the graph filters. The underlying frontmatter key is unchanged.',
-				render: setting => {
+				render: (setting: Setting) => {
 					const entry = this.plugin.settings.properties[index];
 					if (!entry) return;
-					setting.addText(text => text
+					setting.addText((text: TextComponent) => text
 						.setPlaceholder(entry.property || 'Display name')
 						.setValue(entry.label || '')
-						.onChange(async value => {
+						.onChange(async (value: string) => {
 							entry.label = value;
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves(false);
@@ -127,12 +127,12 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 			{
 				name: 'Color',
 				desc: 'Choose the colour used for this property and its graph nodes.',
-				render: setting => {
+				render: (setting: Setting) => {
 					const entry = this.plugin.settings.properties[index];
 					if (!entry) return;
-					setting.addColorPicker(picker => picker
+					setting.addColorPicker((picker: ColorComponent) => picker
 						.setValue(entry.color || DEFAULT_COLOR)
-						.onChange(async value => {
+						.onChange(async (value: string) => {
 							entry.color = value;
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves();
@@ -143,12 +143,12 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 			{
 				name: 'Visible',
 				desc: 'Show this property\'s nodes in the graph.',
-				render: setting => {
+				render: (setting: Setting) => {
 					const entry = this.plugin.settings.properties[index];
 					if (!entry) return;
-					setting.addToggle(toggle => toggle
+					setting.addToggle((toggle: ToggleComponent) => toggle
 						.setValue(entry.visible !== false)
-						.onChange(async value => {
+						.onChange(async (value: boolean) => {
 							entry.visible = value;
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves();
