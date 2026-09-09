@@ -1,7 +1,8 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab } from 'obsidian';
 import type PropertiesToGraphPlugin from './main';
 import { DEFAULT_COLOR, displayLabelFor, nextPaletteColor } from './settings';
 
+/** Settings tab using Obsidian's declarative settings API (1.13+). */
 export class PropertiesToGraphSettingTab extends PluginSettingTab {
 	plugin: PropertiesToGraphPlugin;
 
@@ -10,147 +11,152 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		containerEl.createEl('p', {
-			text: 'Choose one or more frontmatter properties. Each unique value of each property becomes a virtual, colour-coded node in Obsidian\'s graph.'
-		});
-
+	getSettingDefinitions() {
 		const availableProperties = this.plugin.getAvailableProperties();
-		const usedProperties = new Set(this.plugin.settings.properties.map(p => p.property));
+		const usedProperties = new Set(this.plugin.settings.properties.map(entry => entry.property));
 
-		new Setting(containerEl).setName('Properties').setHeading();
-
-		if (!this.plugin.settings.properties.length) {
-			containerEl.createEl('p', {
-				text: 'No properties added yet. Use "Add property" below to start grouping notes.',
-				cls: 'setting-item-description'
-			});
-		}
-
-		this.plugin.settings.properties.forEach((entry, index) => {
-			const setting = new Setting(containerEl)
-				.setName(entry.property ? displayLabelFor(entry) : `Property ${index + 1}`)
-				.addDropdown(dropdown => {
-					dropdown.addOption('', '— Select a property —');
-					for (const property of availableProperties) {
-						// Always include the currently-selected value even if it
-						// disappeared from the vault, plus every property not
-						// already used by another row.
-						if (property === entry.property || !usedProperties.has(property)) {
-							dropdown.addOption(property, property);
-						}
-					}
-					dropdown.setValue(entry.property || '');
-					dropdown.onChange(async value => {
-						this.plugin.settings.properties[index].property = value;
+		return [
+			{
+				type: 'list' as const,
+				heading: 'Properties',
+				emptyState: 'No properties added yet. Add a property to start grouping notes in the graph.',
+				addItem: {
+					name: 'Add property',
+					action: async () => {
+						this.plugin.settings.properties.push({
+							property: '',
+							color: nextPaletteColor(this.plugin.settings.properties.length)
+						});
 						await this.plugin.saveSettings();
-						this.plugin.refreshGraphLeaves();
-						this.display();
+						this.update();
+					}
+				},
+				onDelete: async index => {
+					this.plugin.settings.properties.splice(index, 1);
+					await this.plugin.saveSettings();
+					this.plugin.refreshGraphLeaves();
+					this.plugin.refreshGraphControls();
+					this.update();
+				},
+				onReorder: async (oldIndex, newIndex) => {
+					const [moved] = this.plugin.settings.properties.splice(oldIndex, 1);
+					if (moved) this.plugin.settings.properties.splice(newIndex, 0, moved);
+					await this.plugin.saveSettings();
+					this.plugin.refreshGraphLeaves(false);
+					this.update();
+				},
+				items: this.plugin.settings.properties.map((entry, index) => ({
+					type: 'page' as const,
+					name: displayLabelFor(entry) || `Property ${index + 1}`,
+					desc: entry.property
+						? `Frontmatter key: ${entry.property}`
+						: 'Choose the frontmatter property to group by.',
+					searchable: true,
+					items: this.propertyDefinitions(index, availableProperties, usedProperties)
+				}))
+			},
+			{
+				type: 'group' as const,
+				heading: 'Graph display',
+				items: [
+					{
+						name: 'Show property nodes',
+						desc: 'Show or hide the virtual nodes representing property values.',
+						control: { type: 'toggle' as const, key: 'showPropertyNodes' }
+					},
+					{
+						name: 'Weight nodes by descendants',
+						desc: 'Make property nodes larger when they contain many notes, including indirect descendants.',
+						control: { type: 'toggle' as const, key: 'weightNodesBySubtree' }
+					}
+				]
+			},
+			{
+				name: 'Reset folded nodes',
+				desc: 'Reveal all notes hidden by Shift+click folding.',
+				action: () => this.plugin.unfoldAll()
+			}
+		];
+	}
+
+	private propertyDefinitions(index: number, availableProperties: string[], usedProperties: Set<string>) {
+		return [
+			{
+				name: 'Property',
+				desc: 'The frontmatter property whose values become graph nodes.',
+				render: setting => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addDropdown(dropdown => {
+						dropdown.addOption('', '— Select a property —');
+						for (const property of availableProperties) {
+							if (property === entry.property || !usedProperties.has(property)) {
+								dropdown.addOption(property, property);
+							}
+						}
+						dropdown.setValue(entry.property || '');
+						dropdown.onChange(async value => {
+							entry.property = value;
+							await this.plugin.saveSettings();
+							this.plugin.refreshGraphLeaves();
+							this.plugin.refreshGraphControls();
+							this.update();
+						});
 					});
-				})
-				.addText(text =>
-					text
+				}
+			},
+			{
+				name: 'Display name',
+				desc: 'The name shown in the graph filters. The underlying frontmatter key is unchanged.',
+				render: setting => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addText(text => text
 						.setPlaceholder(entry.property || 'Display name')
 						.setValue(entry.label || '')
 						.onChange(async value => {
-							this.plugin.settings.properties[index].label = value;
-							setting.setName(displayLabelFor(this.plugin.settings.properties[index]));
+							entry.label = value;
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves(false);
 							this.plugin.refreshGraphControls();
+							this.update();
 						})
-				)
-				.addColorPicker(picker =>
-					picker.setValue(entry.color || DEFAULT_COLOR).onChange(async value => {
-						this.plugin.settings.properties[index].color = value;
-						await this.plugin.saveSettings();
-						this.plugin.refreshGraphLeaves();
-					})
-				)
-				.addToggle(toggle =>
-					toggle
-						.setTooltip('Show this property\'s nodes in the graph')
+					);
+				}
+			},
+			{
+				name: 'Color',
+				desc: 'Choose the colour used for this property and its graph nodes.',
+				render: setting => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addColorPicker(picker => picker
+						.setValue(entry.color || DEFAULT_COLOR)
+						.onChange(async value => {
+							entry.color = value;
+							await this.plugin.saveSettings();
+							this.plugin.refreshGraphLeaves();
+						})
+					);
+				}
+			},
+			{
+				name: 'Visible',
+				desc: 'Show this property\'s nodes in the graph.',
+				render: setting => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addToggle(toggle => toggle
 						.setValue(entry.visible !== false)
 						.onChange(async value => {
-							this.plugin.settings.properties[index].visible = value;
+							entry.visible = value;
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves();
 							this.plugin.refreshGraphControls();
 						})
-				)
-				.addExtraButton(button =>
-					button
-						.setIcon('trash')
-						.setTooltip('Remove this property')
-						.onClick(async () => {
-							this.plugin.settings.properties.splice(index, 1);
-							await this.plugin.saveSettings();
-							this.plugin.refreshGraphLeaves();
-							this.plugin.refreshGraphControls();
-							this.display();
-						})
-				);
-
-			setting.settingEl.addClass('p2g-property-row');
-			const textInput = setting.controlEl.querySelector('input[type="text"]');
-			if (textInput) textInput.addClass('p2g-property-label-input');
-		});
-
-		if (this.plugin.settings.properties.length) {
-			containerEl.createEl('p', {
-				text: 'Display name renames how a property appears in this settings page and in the graph\'s Filters panel. It never changes the underlying frontmatter key used for searching.',
-				cls: 'setting-item-description'
-			});
-		}
-
-		new Setting(containerEl).addButton(button =>
-			button
-				.setButtonText('Add property')
-				.setCta()
-				.onClick(async () => {
-					this.plugin.settings.properties.push({
-						property: '',
-						color: nextPaletteColor(this.plugin.settings.properties.length)
-					});
-					await this.plugin.saveSettings();
-					this.display();
-				})
-		);
-
-		new Setting(containerEl).setName('Graph display').setHeading();
-
-		new Setting(containerEl)
-			.setName('Show property nodes')
-			.setDesc('Show or hide the virtual nodes representing property values.')
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.showPropertyNodes).onChange(async value => {
-					this.plugin.settings.showPropertyNodes = value;
-					await this.plugin.saveSettings();
-					this.plugin.refreshGraphLeaves();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Weight nodes by descendants')
-			.setDesc('Make property nodes larger when they contain many notes, including indirect descendants.')
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.weightNodesBySubtree).onChange(async value => {
-					this.plugin.settings.weightNodesBySubtree = value;
-					await this.plugin.saveSettings();
-					this.plugin.refreshGraphLeaves(false);
-				})
-			);
-
-		new Setting(containerEl)
-			.setName('Reset folded nodes')
-			.setDesc('Reveal all notes hidden by Shift+click folding.')
-			.addButton(button => button.setButtonText('Unfold all').onClick(() => this.plugin.unfoldAll()));
-
-		new Setting(containerEl)
-			.setName('Refresh available properties')
-			.setDesc('Rebuild this settings page after adding new properties to notes.')
-			.addButton(button => button.setButtonText('Refresh').onClick(() => this.display()));
+					);
+				}
+			}
+		];
 	}
 }
