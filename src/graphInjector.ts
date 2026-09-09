@@ -1,7 +1,7 @@
 import { App, TFile } from 'obsidian';
 import { Hierarchy } from './hierarchy';
 import { PropertiesToGraphSettings } from './settings';
-import { GraphData } from './graphTypes';
+import { GraphData, GraphNodeData } from './graphTypes';
 
 export const PROPERTY_NODE_TYPE = 'properties2graph_node';
 export const ID_PREFIX = 'p2g:';
@@ -37,8 +37,12 @@ function safeToString(value: string | number | boolean): string {
 
 function extractPropertyValues(value: unknown): string[] {
 	if (Array.isArray(value)) {
-		const items = value as unknown[];
-		return items.flatMap(v => extractPropertyValues(v));
+		const items: unknown[] = value;
+		const results: string[] = [];
+		for (const item of items) {
+			results.push(...extractPropertyValues(item));
+		}
+		return results;
 	}
 	if (value === null || value === undefined) return [];
 	if (typeof value === 'object') {
@@ -111,8 +115,15 @@ export function injectPropertyNodes(
 	type Addition = [groupId: string, label: string, nodeId: string, property: string];
 	const additions: Addition[] = [];
 
-	for (const [nodeId, nodeData] of Object.entries(data.nodes)) {
-		if (!nodeData || nodeData.type === PROPERTY_NODE_TYPE || nodeId.startsWith(ID_PREFIX)) continue;
+	const nodeEntries: [string, GraphNodeData][] = Object.entries(data.nodes as Record<string, unknown>).filter(
+		(entry): entry is [string, GraphNodeData] => {
+			const [, value] = entry;
+			return typeof value === 'object' && value !== null;
+		}
+	);
+
+	for (const [nodeId, nodeData] of nodeEntries) {
+		if (nodeData.type === PROPERTY_NODE_TYPE || nodeId.startsWith(ID_PREFIX)) continue;
 		if (nodeData.type === 'tag' || nodeData.type === 'unresolved') continue;
 		const file = resolveFileForNode(app, nodeId);
 		if (!file) continue;
@@ -159,8 +170,10 @@ export function injectPropertyNodes(
 /** Remove nodes (and any links pointing at them) that the user has folded away. */
 export function filterHiddenNodes(settings: PropertiesToGraphSettings, data: GraphData): void {
 	for (const id of Object.keys(settings.hiddenNodes)) delete data.nodes[id];
-	for (const nodeData of Object.values(data.nodes)) {
-		if (!nodeData || !nodeData.links) continue;
+	for (const value of Object.values(data.nodes as Record<string, unknown>)) {
+		if (typeof value !== 'object' || value === null) continue;
+		const nodeData = value as GraphNodeData;
+		if (!nodeData.links || typeof nodeData.links !== 'object') continue;
 		for (const targetId of Object.keys(nodeData.links)) {
 			if (settings.hiddenNodes[targetId]) delete nodeData.links[targetId];
 		}

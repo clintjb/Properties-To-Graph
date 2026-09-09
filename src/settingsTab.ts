@@ -13,7 +13,6 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		new Setting(containerEl).setName('Properties to Graph').setHeading();
 		containerEl.createEl('p', {
 			text: 'Choose one or more frontmatter properties. Each unique value of each property becomes a virtual, colour-coded node in Obsidian\'s graph.'
 		});
@@ -120,7 +119,7 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 				})
 		);
 
-		new Setting(containerEl).setName('General').setHeading();
+		new Setting(containerEl).setName('Graph display').setHeading();
 
 		new Setting(containerEl)
 			.setName('Show property nodes')
