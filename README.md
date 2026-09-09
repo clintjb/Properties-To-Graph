@@ -2,7 +2,7 @@
  
 ![Demo](demo.gif)
  
-This plugin allows you to chose frontmatter properties and add them as virtual nodes in Obsidian's graph view - basically  notes can be grouped visually by properties instead of only by tags or links.
+This plugin allows you to choose frontmatter properties and add them as virtual nodes in Obsidian's graph view - basically  notes can be grouped visually by properties instead of only by tags or links.
  
 ## Features
  
@@ -30,7 +30,7 @@ topics:
 2. Place both files in `<your-vault>/.obsidian/plugins/properties-to-graph/`.
 3. Enable **Properties to Graph** under Settings → Community plugins.
 4. Open Settings → Properties to Graph.
-5. Click **Add property** for each frontmatter property you want to visualise, choosing a property, name and colour for each.
+5. Click **Add property** for each frontmatter property you want to visualize, choosing a property, name and colour for each.
 6. Open Graph View.
 
 ## Development
