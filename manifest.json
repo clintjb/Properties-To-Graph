@@ -1,7 +1,7 @@
 {
 	"id": "properties-to-graph",
 	"name": "Properties to Graph",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"minAppVersion": "1.13.0",
 	"description": "Adds property based grouping to the graph view.",
 	"author": "Clint Bird",
