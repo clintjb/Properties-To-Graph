@@ -1,10 +1,8 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, DropdownComponent, TextComponent, ColorComponent, ToggleComponent } from 'obsidian';
 import type PropertiesToGraphPlugin from './main';
 import { DEFAULT_COLOR, displayLabelFor, nextPaletteColor } from './settings';
 
-/** Settings UI. Uses the stable imperative API rather than the declarative list API,
- * because rebuilding a page while an input is being edited can make Obsidian close
- * the nested settings page. */
+/** Settings tab using Obsidian's declarative settings API (1.13+). */
 export class PropertiesToGraphSettingTab extends PluginSettingTab {
 	plugin: PropertiesToGraphPlugin;
 
@@ -13,135 +11,150 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-
-		containerEl.createEl('h2', { text: 'Properties' });
-		containerEl.createEl('p', {
-			text: 'Configure which frontmatter properties are shown as grouping nodes in Graph View.'
-		});
-
+	getSettingDefinitions() {
 		const availableProperties = this.plugin.getAvailableProperties();
 		const usedProperties = new Set(this.plugin.settings.properties.map(entry => entry.property));
 
-		for (const entry of this.plugin.settings.properties) {
-			const card = containerEl.createDiv({ cls: 'p2g-property-setting' });
-			card.createEl('h3', { text: displayLabelFor(entry) || 'New property' });
-
-			new Setting(card)
-				.setName('Property')
-				.setDesc('The frontmatter property whose values become graph nodes.')
-				.addDropdown(dropdown => {
-					dropdown.addOption('', '— Select a property —');
-					for (const property of availableProperties) {
-						if (property === entry.property || !usedProperties.has(property)) dropdown.addOption(property, property);
+		return [
+			{
+				type: 'list' as const,
+				heading: 'Properties',
+				emptyState: 'No properties added yet. Add a property to start grouping notes in the graph.',
+				addItem: {
+					name: 'Add property',
+					action: async () => {
+						this.plugin.settings.properties.push({
+							property: '',
+							color: nextPaletteColor(this.plugin.settings.properties.length)
+						});
+						await this.plugin.saveSettings();
+						this.update();
 					}
-					dropdown.setValue(entry.property || '');
-					dropdown.onChange(async value => {
-						usedProperties.delete(entry.property);
-						entry.property = value;
-						if (value) usedProperties.add(value);
-						await this.plugin.saveSettings();
-						this.plugin.refreshGraphLeaves();
-						this.plugin.refreshGraphControls();
-					});
-				});
-
-			new Setting(card)
-				.setName('Display name')
-				.setDesc('The name shown in graph filters. The underlying frontmatter key is unchanged.')
-				.addText(text => text
-					.setPlaceholder(entry.property || 'Display name')
-					.setValue(entry.label || '')
-					.onChange(async value => {
-						entry.label = value;
-						await this.plugin.saveSettings();
-						this.plugin.refreshGraphControls();
-					})
-				);
-
-			new Setting(card)
-				.setName('Color')
-				.setDesc('Choose the colour used for this property and its graph nodes.')
-				.addColorPicker(picker => picker
-					.setValue(entry.color || DEFAULT_COLOR)
-					.onChange(async value => {
-						entry.color = value;
-						await this.plugin.saveSettings();
-						this.plugin.refreshGraphLeaves();
-					})
-				);
-
-			new Setting(card)
-				.setName('Visible')
-				.setDesc('Show this property\'s nodes in the graph.')
-				.addToggle(toggle => toggle
-					.setValue(entry.visible !== false)
-					.onChange(async value => {
-						entry.visible = value;
-						await this.plugin.saveSettings();
-						this.plugin.refreshGraphLeaves();
-						this.plugin.refreshGraphControls();
-					})
-				);
-
-			new Setting(card)
-				.setName('Delete property')
-				.setDesc('Remove this property from the plugin configuration. Your notes and frontmatter are not changed.')
-				.addButton(button => button
-					.setButtonText('Delete')
-					.setWarning()
-					.onClick(async () => {
-						const index = this.plugin.settings.properties.indexOf(entry);
-						if (index >= 0) this.plugin.settings.properties.splice(index, 1);
-						await this.plugin.saveSettings();
-						this.plugin.refreshGraphLeaves();
-						this.plugin.refreshGraphControls();
-						this.display();
-					})
-				);
-		}
-
-		new Setting(containerEl)
-			.setName('Add property')
-			.setDesc('Add another frontmatter property to the graph.')
-			.addButton(button => button
-				.setButtonText('Add property')
-				.setCta()
-				.onClick(async () => {
-					this.plugin.settings.properties.push({
-						property: '',
-						color: nextPaletteColor(this.plugin.settings.properties.length),
-						visible: true
-					});
+				},
+				onDelete: async (index: number) => {
+					this.plugin.settings.properties.splice(index, 1);
 					await this.plugin.saveSettings();
-					this.display();
-				})
-			);
+					this.plugin.refreshGraphLeaves();
+					this.plugin.refreshGraphControls();
+					this.update();
+				},
+				onReorder: async (oldIndex: number, newIndex: number) => {
+					const [moved] = this.plugin.settings.properties.splice(oldIndex, 1);
+					if (moved) this.plugin.settings.properties.splice(newIndex, 0, moved);
+					await this.plugin.saveSettings();
+					this.plugin.refreshGraphLeaves(false);
+					this.update();
+				},
+				items: this.plugin.settings.properties.map((entry, index) => ({
+					type: 'page' as const,
+					name: displayLabelFor(entry) || `Property ${index + 1}`,
+					desc: entry.property
+						? `Frontmatter key: ${entry.property}`
+						: 'Choose the frontmatter property to group by.',
+					searchable: true,
+					items: this.propertyDefinitions(index, availableProperties, usedProperties)
+				}))
+			},
+			{
+				type: 'group' as const,
+				heading: 'Graph display',
+				items: [
+					{
+						name: 'Show property nodes',
+						desc: 'Show or hide the virtual nodes representing property values.',
+						control: { type: 'toggle' as const, key: 'showPropertyNodes' }
+					},
+					{
+						name: 'Weight nodes by descendants',
+						desc: 'Make property nodes larger when they contain many notes, including indirect descendants.',
+						control: { type: 'toggle' as const, key: 'weightNodesBySubtree' }
+					}
+				]
+			},
+			{
+				name: 'Reset folded nodes',
+				desc: 'Reveal all notes hidden by Shift+click folding.',
+				action: () => this.plugin.unfoldAll()
+			}
+		];
+	}
 
-		containerEl.createEl('h2', { text: 'Graph display' });
-		new Setting(containerEl)
-			.setName('Show property nodes')
-			.setDesc('Show or hide the virtual nodes representing property values.')
-			.addToggle(toggle => toggle.setValue(this.plugin.settings.showPropertyNodes).onChange(async value => {
-				this.plugin.settings.showPropertyNodes = value;
-				await this.plugin.saveSettings();
-				this.plugin.refreshGraphLeaves();
-			}));
-
-		new Setting(containerEl)
-			.setName('Weight nodes by descendants')
-			.setDesc('Make property nodes larger when they contain many notes, including indirect descendants.')
-			.addToggle(toggle => toggle.setValue(this.plugin.settings.weightNodesBySubtree).onChange(async value => {
-				this.plugin.settings.weightNodesBySubtree = value;
-				await this.plugin.saveSettings();
-				this.plugin.refreshGraphLeaves();
-			}));
-
-		new Setting(containerEl)
-			.setName('Reset folded nodes')
-			.setDesc('Reveal all notes hidden by Shift+click folding.')
-			.addButton(button => button.setButtonText('Reset').onClick(() => this.plugin.unfoldAll()));
+	private propertyDefinitions(index: number, availableProperties: string[], usedProperties: Set<string>) {
+		return [
+			{
+				name: 'Property',
+				desc: 'The frontmatter property whose values become graph nodes.',
+				render: (setting: Setting) => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addDropdown((dropdown: DropdownComponent) => {
+						dropdown.addOption('', '— Select a property —');
+						for (const property of availableProperties) {
+							if (property === entry.property || !usedProperties.has(property)) {
+								dropdown.addOption(property, property);
+							}
+						}
+						dropdown.setValue(entry.property || '');
+						dropdown.onChange(async (value: string) => {
+							entry.property = value;
+							await this.plugin.saveSettings();
+							this.plugin.refreshGraphLeaves();
+							this.plugin.refreshGraphControls();
+						});
+					});
+				}
+			},
+			{
+				name: 'Display name',
+				desc: 'The name shown in the graph filters. The underlying frontmatter key is unchanged.',
+				render: (setting: Setting) => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addText((text: TextComponent) => text
+						.setPlaceholder(entry.property || 'Display name')
+						.setValue(entry.label || '')
+						.onChange(async (value: string) => {
+							entry.label = value;
+							await this.plugin.saveSettings();
+							this.plugin.refreshGraphLeaves(false);
+							this.plugin.refreshGraphControls();
+						})
+					);
+				}
+			},
+			{
+				name: 'Color',
+				desc: 'Choose the colour used for this property and its graph nodes.',
+				render: (setting: Setting) => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addColorPicker((picker: ColorComponent) => picker
+						.setValue(entry.color || DEFAULT_COLOR)
+						.onChange(async (value: string) => {
+							entry.color = value;
+							await this.plugin.saveSettings();
+							this.plugin.refreshGraphLeaves();
+						})
+					);
+				}
+			},
+			{
+				name: 'Visible',
+				desc: 'Show this property\'s nodes in the graph.',
+				render: (setting: Setting) => {
+					const entry = this.plugin.settings.properties[index];
+					if (!entry) return;
+					setting.addToggle((toggle: ToggleComponent) => toggle
+						.setValue(entry.visible !== false)
+						.onChange(async (value: boolean) => {
+							entry.visible = value;
+							await this.plugin.saveSettings();
+							this.plugin.refreshGraphLeaves();
+							this.plugin.refreshGraphControls();
+						})
+					);
+				}
+			}
+		];
 	}
 }
