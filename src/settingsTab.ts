@@ -172,6 +172,11 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves();
 							this.plugin.refreshGraphControls();
+
+							// Deleting the page currently being viewed can leave Obsidian
+							// on a stale nested settings route. Explicitly reopen this plugin
+							// tab so the user returns to the root Properties settings page.
+							this.app.setting.openTabById(this.plugin.manifest.id);
 							this.update();
 						})
 					);
