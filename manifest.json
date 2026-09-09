@@ -1,9 +1,9 @@
 {
 	"id": "properties-to-graph",
 	"name": "Properties to Graph",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"minAppVersion": "1.4.16",
-	"description": "Adds property based grouping to the graph view.",
+	"description": "Adds property based grouping to Obsidians graph view",
 	"author": "Clint Bird",
 	"authorUrl": "https://clintbird.com",
 	"isDesktopOnly": false
