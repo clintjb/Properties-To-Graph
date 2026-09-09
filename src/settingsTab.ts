@@ -110,16 +110,21 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 				render: (setting: Setting) => {
 					const entry = this.plugin.settings.properties[index];
 					if (!entry) return;
-					setting.addText((text: TextComponent) => text
-						.setPlaceholder(entry.property || 'Display name')
-						.setValue(entry.label || '')
-						.onChange(async (value: string) => {
-							entry.label = value;
-							await this.plugin.saveSettings();
-							this.plugin.refreshGraphLeaves(false);
-							this.plugin.refreshGraphControls();
-						})
-					);
+					setting.addText((text: TextComponent) => {
+						text
+							.setPlaceholder(entry.property || 'Display name')
+							.setValue(entry.label || '')
+							.onChange(async (value: string) => {
+								entry.label = value;
+								await this.plugin.saveSettings();
+								this.plugin.refreshGraphLeaves(false);
+								this.plugin.refreshGraphControls();
+							});
+
+						// Refresh only after the user leaves the field. Updating on every
+						// keystroke destroys the declarative settings page state.
+						text.inputEl.addEventListener('blur', () => this.update());
+					});
 				}
 			},
 			{
@@ -151,6 +156,23 @@ export class PropertiesToGraphSettingTab extends PluginSettingTab {
 							await this.plugin.saveSettings();
 							this.plugin.refreshGraphLeaves();
 							this.plugin.refreshGraphControls();
+						})
+					);
+				}
+			},
+			{
+				name: 'Delete property',
+				desc: 'Remove this property from the plugin configuration. This does not change any notes or frontmatter.',
+				render: (setting: Setting) => {
+					setting.addButton((button) => button
+						.setButtonText('Delete property')
+						.setDestructive()
+						.onClick(async () => {
+							this.plugin.settings.properties.splice(index, 1);
+							await this.plugin.saveSettings();
+							this.plugin.refreshGraphLeaves();
+							this.plugin.refreshGraphControls();
+							this.update();
 						})
 					);
 				}
